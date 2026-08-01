@@ -52,6 +52,6 @@ Raw ratings from different families are not numerically comparable.
   declare one uniform license in its data card. Review its listed upstream
   sources before redistribution outside research use.
 
-See `processed/manifest.json` for exact per-file counts and the accompanying
-GitHub repository for conversion and validation code.
-
+See `processed/manifest.json` for exact per-file counts. Conversion, validation,
+training, and multi-difficulty evaluation code is available in the
+[`hard-sudoku-datasets` GitHub branch](https://github.com/hengyuf/diffusion-vs-ar/tree/hard-sudoku-datasets).

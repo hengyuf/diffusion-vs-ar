@@ -150,6 +150,71 @@ For the 85M or 303M configurations, replace `model_config_tiny` with
 `model_config` or `model_config_medium` and retune the learning rate and batch
 size.
 
+### Config-driven easy training with multi-difficulty evaluation
+
+[`configs/sudoku/mdm-easy-train-multidifficulty-eval.yaml`](configs/sudoku/mdm-easy-train-multidifficulty-eval.yaml)
+is a complete reproducible experiment config. It trains from scratch on the
+original `sudoku_train` and, every 500 optimizer steps, evaluates the same
+deterministically sampled 100 examples from each of:
+
+```text
+original Sudoku test
+Sudoku Extreme r0
+Sudoku Extreme r1_4
+Sudoku Extreme r5_19
+Sudoku Extreme r20_49
+Sudoku Extreme r50_99
+Sudoku Extreme r100_plus
+```
+
+The config also records the model architecture, batch sizes, optimizer,
+scheduler, number of epochs, diffusion settings, checkpoint policy, W&B project
+run name, sampling seed, and output directory. Launch the 8-GPU experiment with:
+
+```bash
+cd /path/to/diffusion-vs-ar
+unset WANDB_DISABLED
+export WANDB_PROJECT=diffusion-vs-ar-hard-sudoku
+wandb login
+
+accelerate launch \
+  --multi_gpu \
+  --num_machines 1 \
+  --mixed_precision fp16 \
+  --num_processes 8 \
+  --main_process_port 20099 \
+  src/train_bash.py \
+  configs/sudoku/mdm-easy-train-multidifficulty-eval.yaml
+```
+
+Hugging Face Trainer evaluates a dictionary of named datasets separately. Its
+state and JSON metrics therefore contain distinct keys rather than one blended
+score:
+
+```text
+eval_original_loss                 eval_original_acc
+eval_extreme_r0_loss               eval_extreme_r0_acc
+eval_extreme_r1_4_loss             eval_extreme_r1_4_acc
+eval_extreme_r5_19_loss            eval_extreme_r5_19_acc
+eval_extreme_r20_49_loss           eval_extreme_r20_49_acc
+eval_extreme_r50_99_loss           eval_extreme_r50_99_acc
+eval_extreme_r100_plus_loss        eval_extreme_r100_plus_acc
+```
+
+The Transformers W&B integration rewrites the first underscore as a namespace,
+so these are displayed in the W&B UI as `eval/original_acc`,
+`eval/extreme_r0_acc`, ..., `eval/extreme_r100_plus_acc` (and the corresponding
+`loss` curves).
+
+The local loss plotting code generates matching PNG curves after training.
+`eval_num_samples: 100` and `eval_sample_seed: 42` control the fixed subsets.
+Changing aliases on the left side of `alias=dataset_name` changes the metric
+names; aliases may contain letters, digits, and underscores.
+
+Multi-step diffusion evaluation is substantially more expensive than computing
+loss alone: this config generates 700 boards through 20 denoising steps every
+500 optimizer steps. Increase `eval_steps` if evaluation dominates training.
+
 ### Train with a difficulty mixture
 
 The loader supports probabilistic interleaving. For a planning-heavy curriculum:

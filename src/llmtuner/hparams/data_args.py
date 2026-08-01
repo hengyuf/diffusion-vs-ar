@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from typing import List, Literal, Optional
 from dataclasses import dataclass, field
 
@@ -31,6 +32,23 @@ class DataArguments:
     dataset: Optional[str] = field(
         default=None,
         metadata={"help": "The name of provided dataset(s) to use. Use commas to separate multiple datasets."}
+    )
+    eval_dataset: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Comma-separated named evaluation datasets. Use alias=dataset, for example "
+                "original=sudoku_test,extreme_r50_99=sudoku_extreme_test_r50_99."
+            )
+        }
+    )
+    eval_num_samples: Optional[int] = field(
+        default=None,
+        metadata={"help": "Deterministically sample at most this many examples from each named eval dataset."}
+    )
+    eval_sample_seed: Optional[int] = field(
+        default=42,
+        metadata={"help": "Random seed used when sampling each named eval dataset."}
     )
     dataset_dir: Optional[str] = field(
         default="data",
@@ -106,6 +124,15 @@ class DataArguments:
     )
 
     def __post_init__(self):
+        if self.eval_num_samples is not None and self.eval_num_samples <= 0:
+            raise ValueError("`eval_num_samples` must be greater than zero.")
+
+        for alias, _ in self.get_named_eval_datasets():
+            if re.fullmatch(r"[A-Za-z0-9_]+", alias) is None:
+                raise ValueError(
+                    "Evaluation aliases may contain only letters, digits, and underscores: {}".format(alias)
+                )
+
         if self.streaming and self.val_size > 1e-6 and self.val_size < 1:
             raise ValueError("Streaming mode should have an integer val size.")
 
@@ -114,6 +141,28 @@ class DataArguments:
 
         if self.streaming and self.cache_path:
             raise ValueError("`cache_path` is incompatible with `streaming`.")
+
+    def get_named_eval_datasets(self):
+        """Return ``(metric_alias, dataset_name)`` pairs from ``eval_dataset``."""
+        if not self.eval_dataset:
+            return []
+        result = []
+        seen = set()
+        for item in self.eval_dataset.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            if "=" in item:
+                alias, dataset_name = (part.strip() for part in item.split("=", 1))
+            else:
+                alias = dataset_name = item
+            if not alias or not dataset_name:
+                raise ValueError("Invalid named evaluation dataset: {!r}".format(item))
+            if alias in seen:
+                raise ValueError("Duplicate evaluation alias: {}".format(alias))
+            seen.add(alias)
+            result.append((alias, dataset_name))
+        return result
 
     def init_for_training(self, seed: int): # support mixing multiple datasets
         self.seed = seed

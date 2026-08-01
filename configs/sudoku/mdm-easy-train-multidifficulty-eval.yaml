@@ -1,0 +1,62 @@
+# Train from scratch on the original easy Sudoku train set and evaluate on
+# deterministic 100-example samples from seven named difficulty splits.
+
+# Model architecture: ~6M parameter, 3-layer, 384-hidden GPT-2 denoiser.
+model_name_or_path: model_config_tiny
+stage: mdm
+finetuning_type: full
+
+# Data. Trainer keys use the aliases to the left of each '=' (for example,
+# eval_original_acc); the W&B integration displays that key as eval/original_acc.
+dataset: sudoku_train
+eval_dataset: >-
+  original=sudoku_test,
+  extreme_r0=sudoku_extreme_test_r0,
+  extreme_r1_4=sudoku_extreme_test_r1_4,
+  extreme_r5_19=sudoku_extreme_test_r5_19,
+  extreme_r20_49=sudoku_extreme_test_r20_49,
+  extreme_r50_99=sudoku_extreme_test_r50_99,
+  extreme_r100_plus=sudoku_extreme_test_r100_plus
+eval_num_samples: 100
+eval_sample_seed: 42
+dataset_dir: data
+cutoff_len: 164
+preprocessing_num_workers: 8
+overwrite_cache: true
+remove_unused_columns: false
+val_size: 0
+
+# Output and reporting.
+output_dir: output/sudoku/mdm-easy-train-multidifficulty-eval-tiny
+overwrite_output_dir: true
+run_name: mdm-easy-train-multidifficulty-eval-tiny
+report_to: wandb
+logging_steps: 1
+plot_loss: true
+
+# Optimization. Eight GPUs give a global batch size of 8 * 128 = 1024.
+do_train: true
+per_device_train_batch_size: 128
+gradient_accumulation_steps: 1
+per_device_eval_batch_size: 32
+learning_rate: 0.001
+lr_scheduler_type: cosine
+num_train_epochs: 300.0
+fp16: true
+
+# Run all seven named evaluations every 500 optimizer steps.
+evaluation_strategy: steps
+eval_steps: 500
+save_strategy: steps
+save_steps: 500
+save_total_limit: 1
+save_safetensors: false
+
+# Mask diffusion / MDM.
+diffusion_steps: 20
+token_reweighting: true
+time_reweighting: linear
+topk_decoding: true
+decoding_strategy: stochastic0.5-linear
+alpha: 0.25
+gamma: 1.0
