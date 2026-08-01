@@ -1,0 +1,22 @@
+{
+  "sudoku_exchange_train_diabolical": 119681,
+  "sudoku_exchange_train_easy": 100000,
+  "sudoku_exchange_train_hard": 321592,
+  "sudoku_exchange_train_medium": 352643,
+  "sudoku_extreme_test_r0": 61127,
+  "sudoku_extreme_test_r100_plus": 4364,
+  "sudoku_extreme_test_r1_4": 58717,
+  "sudoku_extreme_test_r20_49": 143851,
+  "sudoku_extreme_test_r50_99": 42896,
+  "sudoku_extreme_test_r5_19": 111831,
+  "sudoku_extreme_train_r0": 553009,
+  "sudoku_extreme_train_r100_plus": 40656,
+  "sudoku_extreme_train_r1_4": 529736,
+  "sudoku_extreme_train_r20_49": 1306567,
+  "sudoku_extreme_train_r50_99": 382534,
+  "sudoku_extreme_train_r5_19": 1019492,
+  "sudoku_kaggle3m_train_r0": 1294081,
+  "sudoku_kaggle3m_train_r1_2": 812419,
+  "sudoku_kaggle3m_train_r2_4": 816076,
+  "sudoku_kaggle3m_train_r4_plus": 77424
+}

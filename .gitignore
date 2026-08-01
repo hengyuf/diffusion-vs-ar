@@ -1,0 +1,12 @@
+cache/
+output/
+wandb/
+__pycache__/
+*.pyc
+
+# Dataset payloads live on Hugging Face, not in Git.
+data/raw/
+data/.cache/
+data/processed/*.csv
+data/sudoku_train.csv
+data/sudoku_test.csv

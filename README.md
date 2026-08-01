@@ -50,6 +50,181 @@ For experiment on different datasets, change `--dataset` (dataset name in `data/
 
 Please refer to Appendix C.2 for other illustraion of implementation details.
 
+## Hard Sudoku datasets
+
+The original Sudoku data is intentionally easy: sampled puzzles can be solved
+with naked-single propagation and require no search. This branch adds
+difficulty-stratified Sudoku corpora for experiments involving candidate
+assumptions, search, and backtracking. The converted data is hosted at
+[`fhyfhy/diffusion-vs-ar-hard-sudoku`](https://huggingface.co/datasets/fhyfhy/diffusion-vs-ar-hard-sudoku).
+
+### Download
+
+Install the Hugging Face CLI and download directly into the layout expected by
+this repository:
+
+```bash
+pip install -U huggingface_hub
+hf download fhyfhy/diffusion-vs-ar-hard-sudoku \
+  --repo-type dataset \
+  --local-dir data \
+  --include "processed/*.csv" "processed/manifest.json" \
+            "sudoku_train.csv" "sudoku_test.csv"
+```
+
+After downloading, the important paths are:
+
+```text
+data/dataset_info.json
+data/sudoku_train.csv
+data/sudoku_test.csv
+data/processed/sudoku_extreme_train_r50_99.csv
+data/processed/sudoku_extreme_test_r50_99.csv
+...
+```
+
+All processed files begin with the original compatible columns
+`quizzes,solutions`. They additionally preserve `source`, `official_rating`,
+`rating_type`, `difficulty_bucket`, `clues`, and `split`. Exact counts are in
+[`data/processed/manifest.json`](data/processed/manifest.json).
+
+Difficulty systems are kept separate:
+
+| family | rating | buckets |
+|---|---|---|
+| Sudoku Extreme | tdoku backtracks | `r0`, `r1_4`, `r5_19`, `r20_49`, `r50_99`, `r100_plus` |
+| Kaggle 3M | mean search depth over 10 runs | `r0`, `r1_2`, `r2_4`, `r4_plus` |
+| Sudoku Exchange | Sukaku Explainer | `easy`, `medium`, `hard`, `diabolical` |
+
+Do not compare raw rating numbers across families: each rating is produced by a
+different solver and measures a different notion of difficulty.
+
+### Train on one difficulty bucket
+
+The following is the original 8-GPU MDM setup changed to train on puzzles with
+50--99 tdoku backtracks:
+
+```bash
+exp=output/sudoku/mdm-extreme-r50-99-$(date "+%Y%m%d-%H%M%S")
+mkdir -p "$exp"
+
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 \
+accelerate launch --multi_gpu --num_machines 1 --mixed_precision fp16 \
+  --num_processes 8 --main_process_port 20099 src/train_bash.py \
+  --stage mdm --overwrite_output_dir \
+  --cache_dir ./cache \
+  --model_name_or_path model_config_tiny \
+  --do_train \
+  --dataset sudoku_extreme_train_r50_99 \
+  --finetuning_type full \
+  --cutoff_len 164 \
+  --output_dir "$exp" \
+  --overwrite_cache \
+  --per_device_train_batch_size 128 \
+  --gradient_accumulation_steps 1 \
+  --lr_scheduler_type cosine \
+  --logging_steps 1 \
+  --val_size 448 \
+  --per_device_eval_batch_size 32 \
+  --evaluation_strategy steps \
+  --eval_steps 100 \
+  --save_steps 500 \
+  --learning_rate 1e-3 \
+  --num_train_epochs 300 \
+  --plot_loss \
+  --run_name sudoku-extreme-r50-99 \
+  --preprocessing_num_workers 8 \
+  --fp16 \
+  --save_total_limit 1 \
+  --remove_unused_columns False \
+  --diffusion_steps 20 \
+  --save_safetensors False \
+  --token_reweighting True \
+  --time_reweighting linear \
+  --topk_decoding True \
+  --alpha 0.25 \
+  --gamma 1
+```
+
+For the 85M or 303M configurations, replace `model_config_tiny` with
+`model_config` or `model_config_medium` and retune the learning rate and batch
+size.
+
+### Train with a difficulty mixture
+
+The loader supports probabilistic interleaving. For a planning-heavy curriculum:
+
+```bash
+--dataset sudoku_extreme_train_r5_19,sudoku_extreme_train_r20_49,sudoku_extreme_train_r50_99,sudoku_extreme_train_r100_plus \
+--mix_strategy interleave_over \
+--interleave_probs 0.1,0.3,0.4,0.2
+```
+
+Add these arguments to the training command above in place of its single
+`--dataset` argument. `interleave_over` continues until all constituent data
+have been consumed; use `interleave_under` to stop when the first constituent
+is exhausted. For reproducible comparisons, report both the mixture weights and
+the number of optimizer steps.
+
+### Evaluate by difficulty
+
+Evaluate each bucket separately so easy examples do not hide failure on hard
+ones:
+
+```bash
+checkpoint=output/sudoku/YOUR_RUN
+
+for bucket in r5_19 r20_49 r50_99 r100_plus; do
+  out="$checkpoint/eval_$bucket"
+  mkdir -p "$out"
+  CUDA_VISIBLE_DEVICES=0 python3 -u src/train_bash.py \
+    --stage mdm --overwrite_output_dir \
+    --cache_dir ./cache \
+    --model_name_or_path model_config_tiny \
+    --checkpoint_dir "$checkpoint" \
+    --do_predict \
+    --dataset "sudoku_extreme_test_$bucket" \
+    --finetuning_type full \
+    --cutoff_len 164 \
+    --diffusion_steps 20 \
+    --output_dir "$out" \
+    --remove_unused_columns False \
+    --decoding_strategy stochastic0.5-linear \
+    --topk_decoding True \
+    > "$out/eval.log"
+done
+```
+
+Each output directory contains `generated_predictions.jsonl` and
+`predict_results.json`. The reported Sudoku accuracy is whole-board exact match,
+not per-cell accuracy.
+
+### Weights & Biases
+
+The original scripts set `WANDB_DISABLED=true`. To log both training loss and
+periodic `eval_loss`/`eval_acc`, remove that line and use:
+
+```bash
+unset WANDB_DISABLED
+export WANDB_PROJECT=diffusion-vs-ar-hard-sudoku
+wandb login
+```
+
+Then add `--report_to wandb --run_name YOUR_RUN_NAME` to the training command.
+
+### Rebuild the converted files
+
+The reproducible streaming converter and Sudoku Exchange solution generator are
+in `tools/`:
+
+```bash
+python3 tools/prepare_sudoku_datasets.py
+```
+
+The converter preserves source ratings, produces physical bucket files that the
+existing loader can mix without code changes, and regenerates
+`data/dataset_info.json` and the manifest.
+
 ## Citation
 If you find our code or data helpful, please cite us as follows 
 ```

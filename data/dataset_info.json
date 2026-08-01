@@ -1,0 +1,200 @@
+{
+  "sudoku_test": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "sudoku_test.csv"
+  },
+  "sudoku_train": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "sudoku_train.csv"
+  },
+  "sudoku_exchange_train_diabolical": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_exchange_train_diabolical.csv"
+  },
+  "sudoku_exchange_train_easy": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_exchange_train_easy.csv"
+  },
+  "sudoku_exchange_train_hard": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_exchange_train_hard.csv"
+  },
+  "sudoku_exchange_train_medium": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_exchange_train_medium.csv"
+  },
+  "sudoku_extreme_test_r0": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r0.csv"
+  },
+  "sudoku_extreme_test_r100_plus": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r100_plus.csv"
+  },
+  "sudoku_extreme_test_r1_4": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r1_4.csv"
+  },
+  "sudoku_extreme_test_r20_49": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r20_49.csv"
+  },
+  "sudoku_extreme_test_r50_99": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r50_99.csv"
+  },
+  "sudoku_extreme_test_r5_19": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_test_r5_19.csv"
+  },
+  "sudoku_extreme_train_r0": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r0.csv"
+  },
+  "sudoku_extreme_train_r100_plus": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r100_plus.csv"
+  },
+  "sudoku_extreme_train_r1_4": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r1_4.csv"
+  },
+  "sudoku_extreme_train_r20_49": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r20_49.csv"
+  },
+  "sudoku_extreme_train_r50_99": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r50_99.csv"
+  },
+  "sudoku_extreme_train_r5_19": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_extreme_train_r5_19.csv"
+  },
+  "sudoku_kaggle3m_train_r0": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_kaggle3m_train_r0.csv"
+  },
+  "sudoku_kaggle3m_train_r1_2": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_kaggle3m_train_r1_2.csv"
+  },
+  "sudoku_kaggle3m_train_r2_4": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_kaggle3m_train_r2_4.csv"
+  },
+  "sudoku_kaggle3m_train_r4_plus": {
+    "columns": {
+      "history": "",
+      "prompt": "quizzes",
+      "query": "",
+      "response": "solutions"
+    },
+    "file_name": "processed/sudoku_kaggle3m_train_r4_plus.csv"
+  }
+}
