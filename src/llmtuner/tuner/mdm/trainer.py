@@ -15,12 +15,13 @@ from transformers.trainer_utils import EvalPrediction
 from transformers.training_args import TrainingArguments
 from llmtuner.extras.constants import IGNORE_INDEX
 from llmtuner.extras.logging import get_logger
+from llmtuner.extras.scheduler import WSDSchedulerMixin
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 import torch.nn.functional as F
 
 logger = get_logger(__name__)
 
-class CustomDiffusionTrainer(Trainer):
+class CustomDiffusionTrainer(WSDSchedulerMixin, Trainer):
     def __init__(
         self,
         diff_args,

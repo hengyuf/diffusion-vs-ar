@@ -1,0 +1,102 @@
+# Train on a difficulty-balanced mixture -- the original easy Sudoku train set plus
+# every Sudoku Extreme train bucket, each capped at 10000 examples -- and evaluate on
+# deterministic 100-example samples from seven named difficulty splits.
+#
+# Companion to mdm-easy-train-multidifficulty-eval.yaml, which trains on the easy
+# set alone. Same model, optimizer, and evaluation, so the two runs are directly
+# comparable; only the training mixture differs.
+
+# Model architecture: ~6M parameter, 3-layer, 384-hidden GPT-2 denoiser.
+model_name_or_path: model_config_medium
+stage: mdm
+finetuning_type: full
+
+# Training mixture. `max_samples` is applied per dataset, inside the load loop in
+# dsets/loader.py, so this is 7 x 10000 = 70000 examples with equal weight on each
+# difficulty -- not 10000 in total.
+#
+# Two details of that truncation, both verified against the data:
+#   - It is dataset.select(range(10000)), i.e. the head of each file, not a random
+#     sample. The rows are not sorted by difficulty (for r5_19 the first 10000 rows
+#     have mean tdoku rating 11.8 / mean clues 24.96 against 11.8 / 24.92 for the
+#     whole file), so the head is representative of its bucket.
+#   - It applies to training data only. mdm/workflow.py clears max_samples before
+#     building the eval sets, which keep using eval_num_samples below.
+dataset: >-
+  sudoku_train,
+  sudoku_extreme_train_r0,
+  sudoku_extreme_train_r1_4
+max_samples: 65536
+  # sudoku_extreme_train_r5_19,
+  # sudoku_extreme_train_r20_49,
+  # sudoku_extreme_train_r50_99,
+  # sudoku_extreme_train_r100_plus
+# concat, not interleave: the loader warns against interleaving outside streaming
+# mode, and with every bucket capped to the same 10000 the mixture is already
+# balanced. The Trainer reshuffles the concatenated set each epoch.
+mix_strategy: concat
+
+# Evaluation. Trainer keys use the aliases to the left of each '=' (for example,
+# eval_original_acc); the W&B integration displays that key as eval/original_acc.
+eval_dataset: >-
+  original=sudoku_test,
+  extreme_r0=sudoku_extreme_test_r0,
+  extreme_r1_4=sudoku_extreme_test_r1_4,
+  extreme_r5_19=sudoku_extreme_test_r5_19,
+  extreme_r20_49=sudoku_extreme_test_r20_49,
+  extreme_r50_99=sudoku_extreme_test_r50_99,
+  extreme_r100_plus=sudoku_extreme_test_r100_plus
+eval_num_samples: 200
+eval_sample_seed: 42
+dataset_dir: data
+cutoff_len: 164
+preprocessing_num_workers: 4
+overwrite_cache: true
+remove_unused_columns: false
+val_size: 0
+
+# Output and reporting.
+output_dir: output/sudoku/mdm-extreme-mix10k-train-multidifficulty-eval-tiny
+overwrite_output_dir: true
+run_name: mdm-extreme-mix10k-train-multidifficulty-eval-tiny
+report_to: wandb
+logging_steps: 1
+plot_loss: true
+
+# Optimization. Four GB200s give a global batch size of 4 * 256 = 1024.
+# 70000 examples / 1024 = ~68 optimizer steps per epoch, so 300 epochs is ~20500
+# steps against ~29400 for the 100000-example easy-only config. Set max_steps or
+# raise num_train_epochs to ~430 if you would rather match step count than epochs.
+do_train: true
+per_device_train_batch_size: 512
+gradient_accumulation_steps: 1
+per_device_eval_batch_size: 64
+learning_rate: 0.002
+lr_scheduler_type: cosine
+num_train_epochs: 500.0
+fp16: true
+
+warmup_steps: 200         # 或用 warmup_steps: 200
+lr_scheduler_kwargs:
+  schedule: wsd
+  decay_ratio: 0.2          # 最後 20% 的步數用來 decay
+  decay_type: cosine        # linear | cosine | 1-sqrt
+  min_lr_ratio: 0.0         # 結束時的 LR = min_lr_ratio × peak
+
+
+# Run all seven named evaluations every 500 optimizer steps.
+evaluation_strategy: steps
+eval_steps: 500
+save_strategy: steps
+save_steps: 500
+save_total_limit: 1
+save_safetensors: false
+
+# Mask diffusion / MDM.
+diffusion_steps: 20
+token_reweighting: true
+time_reweighting: linear
+topk_decoding: true
+decoding_strategy: stochastic0.5-linear
+alpha: 0.25
+gamma: 1.0

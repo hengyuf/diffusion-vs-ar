@@ -1,0 +1,33 @@
+# requirements.txt adapted for aarch64 GB200 (sm_100, driver 580 / CUDA 13.0).
+#
+# The original pins (python 3.9, torch==1.13.1+cu117) have no arm64 wheels and no
+# Blackwell kernels. Only torch and the numeric stack move; the HF libraries stay
+# at the versions this LLaMA-Factory fork was written against.
+#
+# Canonical source of truth is pyproject.toml + uv.lock (see SETUP-gb200.md).
+# This file exists for non-uv installs:
+#   pip install -r requirements-gb200.txt --extra-index-url https://download.pytorch.org/whl/cu128
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# Python 3.11 (3.9 has no aarch64 wheels for this stack; 3.12 breaks datasets 2.16).
+torch==2.9.1+cu128
+
+# Unchanged from requirements.txt -- do NOT bump:
+#   transformers >= 4.46 removed --evaluation_strategy, which every script here passes,
+#   and the mdm/sft trainers subclass Trainer internals that changed after 4.37.
+transformers==4.37.2
+datasets==2.16.1        # was 2.14.7; 2.16.1 is the pyarrow>=14-safe patch of the same API
+accelerate==0.27.2
+peft==0.6.0
+huggingface-hub==0.20.3
+matplotlib>=3.7,<3.10
+wandb>=0.17,<0.19       # was 0.14.0, which predates aarch64 wheels
+
+# numpy must stay <2: transformers 4.37 / datasets 2.16 predate the numpy 2 ABI.
+numpy<2
+pandas>=2.0,<2.3
+pyarrow>=14,<15
+sentencepiece>=0.2
+protobuf<5
+scipy>=1.11

@@ -21,7 +21,7 @@ eval_num_samples: 100
 eval_sample_seed: 42
 dataset_dir: data
 cutoff_len: 164
-preprocessing_num_workers: 8
+preprocessing_num_workers: 4
 overwrite_cache: true
 remove_unused_columns: false
 val_size: 0
@@ -36,10 +36,10 @@ plot_loss: true
 
 # Optimization. Eight GPUs give a global batch size of 8 * 128 = 1024.
 do_train: true
-per_device_train_batch_size: 128
+per_device_train_batch_size: 512
 gradient_accumulation_steps: 1
 per_device_eval_batch_size: 32
-learning_rate: 0.001
+learning_rate: 0.002
 lr_scheduler_type: cosine
 num_train_epochs: 300.0
 fp16: true
