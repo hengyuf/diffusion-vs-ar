@@ -4,6 +4,10 @@ wandb/
 __pycache__/
 *.pyc
 
+# uv environment: 7 GB, and architecture-specific. Rebuild with `uv sync --locked`.
+.venv/
+.venv-*/
+
 # Dataset payloads live on Hugging Face, not in Git.
 data/raw/
 data/.cache/

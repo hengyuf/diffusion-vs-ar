@@ -1,0 +1,39 @@
+[project]
+name = "diffusion-vs-ar"
+version = "0.1.0"
+requires-python = "==3.11.*"
+
+# Pins mirror requirements-gb200.txt / requirements-h100.txt. Do NOT bump
+# transformers: the mdm/sft trainers subclass Trainer internals that changed
+# after 4.37, and every script in scripts/ passes --evaluation_strategy, which
+# was removed in 4.46. numpy must stay <2 for the transformers 4.37 ABI.
+dependencies = [
+    "accelerate==0.27.2",
+    "datasets==2.16.1",
+    "huggingface-hub==0.20.3",
+    "matplotlib>=3.7,<3.10",
+    "numpy<2",
+    "pandas>=2.0,<2.3",
+    "peft==0.6.0",
+    "protobuf<5",
+    "pyarrow>=14,<15",
+    "scipy>=1.11",
+    "sentencepiece>=0.2",
+    "torch==2.9.1",
+    "transformers==4.37.2",
+    "wandb>=0.17,<0.19",
+]
+
+# No [build-system] on purpose: uv treats this as a virtual project, so `uv sync`
+# builds .venv/ from the dependencies without installing the repo itself.
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+# cu128 carries sm_90 (H100) and sm_100 (GB200) kernels, so one lock serves both
+# nodes. CUDA minor-version compatibility makes the cu128 runtime work on this
+# node's 535 driver.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

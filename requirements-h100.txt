@@ -1,0 +1,36 @@
+# requirements.txt adapted for x86_64 H100 (sm_90, driver 535 / CUDA 12.2).
+#
+# Identical pins to requirements-gb200.txt -- the cu128 build ships both sm_90
+# and sm_100 kernels, so one dependency set covers the H100 and GB200 nodes and
+# `uv.lock` resolves unchanged on either architecture.
+#
+# Canonical source of truth is pyproject.toml + uv.lock (see SETUP-h100.md).
+# This file exists for non-uv installs:
+#   pip install -r requirements-h100.txt --extra-index-url https://download.pytorch.org/whl/cu128
+
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# Python 3.11 (3.9 has no wheels for this stack; 3.12 breaks datasets 2.16).
+#
+# cu128 on a 12.2 driver is fine: CUDA minor-version compatibility makes any
+# 12.x runtime run on a >= 525 driver. Verified on this node -- see SETUP-h100.md.
+torch==2.9.1+cu128
+
+# Unchanged from requirements.txt -- do NOT bump:
+#   transformers >= 4.46 removed --evaluation_strategy, which every script here passes,
+#   and the mdm/sft trainers subclass Trainer internals that changed after 4.37.
+transformers==4.37.2
+datasets==2.16.1        # was 2.14.7; 2.16.1 is the pyarrow>=14-safe patch of the same API
+accelerate==0.27.2
+peft==0.6.0
+huggingface-hub==0.20.3
+matplotlib>=3.7,<3.10
+wandb>=0.17,<0.19
+
+# numpy must stay <2: transformers 4.37 / datasets 2.16 predate the numpy 2 ABI.
+numpy<2
+pandas>=2.0,<2.3
+pyarrow>=14,<15
+sentencepiece>=0.2
+protobuf<5
+scipy>=1.11
