@@ -1,0 +1,67 @@
+{
+  "checkpoint": "/lustre/fsw/portfolios/nemotron/projects/nemotron_agents_dev/users/hengyuf/diffusion-vs-ar/output/sudoku/mdm-extreme-mix10k-train-multidifficulty-eval-tiny/checkpoint-45500",
+  "config": "/lustre/fsw/portfolios/nemotron/projects/nemotron_agents_dev/users/hengyuf/diffusion-vs-ar/configs/sudoku/mdm-extreme-mix10k-train-multidifficulty-eval.yaml",
+  "diffusion_steps": 40,
+  "decoding_strategy": "stochastic0.5-linear",
+  "dtype": "float32",
+  "seed": 2,
+  "digits": "123456789",
+  "splits": [
+    {
+      "split": "original",
+      "dataset": "sudoku_test",
+      "num_samples": 200,
+      "accuracy": 1.0,
+      "n_correct": 200,
+      "file": "original.json"
+    },
+    {
+      "split": "extreme_r0",
+      "dataset": "sudoku_extreme_test_r0",
+      "num_samples": 200,
+      "accuracy": 0.805,
+      "n_correct": 161,
+      "file": "extreme_r0.json"
+    },
+    {
+      "split": "extreme_r1_4",
+      "dataset": "sudoku_extreme_test_r1_4",
+      "num_samples": 200,
+      "accuracy": 0.38,
+      "n_correct": 76,
+      "file": "extreme_r1_4.json"
+    },
+    {
+      "split": "extreme_r5_19",
+      "dataset": "sudoku_extreme_test_r5_19",
+      "num_samples": 200,
+      "accuracy": 0.04,
+      "n_correct": 8,
+      "file": "extreme_r5_19.json"
+    },
+    {
+      "split": "extreme_r20_49",
+      "dataset": "sudoku_extreme_test_r20_49",
+      "num_samples": 200,
+      "accuracy": 0.065,
+      "n_correct": 13,
+      "file": "extreme_r20_49.json"
+    },
+    {
+      "split": "extreme_r50_99",
+      "dataset": "sudoku_extreme_test_r50_99",
+      "num_samples": 200,
+      "accuracy": 0.05,
+      "n_correct": 10,
+      "file": "extreme_r50_99.json"
+    },
+    {
+      "split": "extreme_r100_plus",
+      "dataset": "sudoku_extreme_test_r100_plus",
+      "num_samples": 200,
+      "accuracy": 0.03,
+      "n_correct": 6,
+      "file": "extreme_r100_plus.json"
+    }
+  ]
+}

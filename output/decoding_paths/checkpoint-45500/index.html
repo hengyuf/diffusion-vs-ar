@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDM Sudoku decoding paths</title>
+<style>
+  /* Light mode only. Categorical marks (blue / orange / violet) were checked with
+     the palette validator, all-pairs: CVD deltaE 13.0 (deutan), normal-vision 16.3,
+     all >= 3:1 on the surface. */
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --muted: #898781;
+    --grid-line: #e1e0d9;
+    --rule: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --series-1: #2a78d6;   /* slot 1 — cells the model must fill */
+    --commit:   #eb6834;   /* slot 2 — unmasked at this step */
+    --remask:   #4a3aa7;   /* slot 7 — re-masked at this step */
+    --good:     #0ca30c;   /* status — ground-truth digit */
+    --critical: #d03b3b;   /* status — committed digit is wrong */
+    /* blue sequential ramp, light -> dark for p(digit) 0 -> 1 */
+    --seq-0: #fcfcfb; --seq-1: #cde2fb; --seq-2: #b7d3f6; --seq-3: #9ec5f4;
+    --seq-4: #86b6ef; --seq-5: #6da7ec; --seq-6: #5598e7; --seq-7: #3987e5;
+    --seq-8: #2a78d6; --seq-9: #256abf; --seq-10: #1c5cab; --seq-11: #184f95;
+    --seq-12: #0d366b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px 24px 48px;
+    background: var(--page); color: var(--text-primary);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 19px; margin: 0 0 2px; font-weight: 600; }
+  h2 { font-size: 13px; margin: 0 0 10px; font-weight: 600; }
+  .sub { color: var(--text-secondary); font-size: 12px; margin-bottom: 18px; }
+  .sub code { font-size: 11px; color: var(--muted); }
+
+  /* one filter row, above everything it scopes */
+  .filters {
+    display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end;
+    padding: 12px 14px; margin-bottom: 18px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field > label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  select, button {
+    font: inherit; font-size: 13px; color: var(--text-primary);
+    background: var(--surface-1); border: 1px solid var(--rule);
+    border-radius: 6px; padding: 5px 8px; min-height: 30px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--series-1); }
+  button.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; min-width: 78px; }
+
+  main { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+  .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+
+  /* ---- sudoku boards ---- */
+  .board { display: grid; grid-template-columns: repeat(9, var(--cell));
+           border: 2px solid var(--rule); width: max-content; }
+  .cell {
+    width: var(--cell); height: var(--cell); position: relative;
+    border-right: 1px solid var(--grid-line); border-bottom: 1px solid var(--grid-line);
+    display: flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .cell:nth-child(9n) { border-right: none; }
+  .cell:nth-child(n+73) { border-bottom: none; }
+  .cell.bx-r { border-right: 2px solid var(--rule); }
+  .cell.bx-b { border-bottom: 2px solid var(--rule); }
+
+  #boardLeft { --cell: 40px; font-size: 17px; }
+  #boardLeft .given { font-weight: 700; color: var(--text-primary); }
+  #boardLeft .derived { font-weight: 400; color: var(--series-1); }
+
+  #boardRight { --cell: 58px; }
+  #boardRight .cell { cursor: pointer; }
+  #boardRight .cell.sel { outline: 2px solid var(--text-primary); outline-offset: -2px; z-index: 4; }
+  #boardRight .cell:focus-visible { outline: 2px solid var(--text-primary); outline-offset: -2px; z-index: 4; }
+  .digit { font-size: 22px; font-variant-numeric: tabular-nums; }
+  .digit.mask { color: var(--muted); font-size: 15px; }
+  .digit.wrong { color: var(--critical); font-weight: 700; }
+  /* confidence as a thin bar along the cell floor, not a saturated block fill */
+  .confbar { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px;
+             border-radius: 2px; background: var(--grid-line); overflow: hidden; }
+  .confbar i { display: block; height: 3px; border-radius: 2px; background: var(--series-1); }
+
+  /* event rings: committed / re-masked at this step */
+  .cell.fresh::after, .cell.remasked::after {
+    content: ""; position: absolute; inset: 2px; border-radius: 3px; pointer-events: none; z-index: 3;
+  }
+  .cell.fresh::after    { border: 2.5px solid var(--commit); }
+  .cell.remasked::after { border: 2.5px solid var(--remask); }
+
+  /* 3x3 pencil-mark heatmap of p(1..9) */
+  .pm { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+        position: absolute; inset: 1px; gap: 1px; }
+  .pm span { display: flex; align-items: center; justify-content: center;
+             font-size: 11px; line-height: 1; border-radius: 2px; font-variant-numeric: tabular-nums; }
+  .pm span.sol { outline: 1.5px solid var(--good); outline-offset: -1.5px; }
+  .cell.committed .pm { opacity: .40; }
+  .pin { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+         font-size: 23px; font-weight: 700; pointer-events: none; z-index: 2;
+         text-shadow: 0 0 3px var(--surface-1), 0 0 7px var(--surface-1), 0 0 10px var(--surface-1); }
+
+  /* ---- legends ---- */
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 11.5px; color: var(--text-secondary); }
+  .legend .item { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+  .swatch.ring-c { background: transparent; border: 2.5px solid var(--commit); }
+  .swatch.ring-r { background: transparent; border: 2.5px solid var(--remask); }
+  .swatch.ring-g { background: transparent; border: 1.5px solid var(--good); }
+  .scale { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .scale .ramp { display: flex; height: 10px; border-radius: 2px; overflow: hidden; border: 1px solid var(--border); }
+  .scale .ramp i { width: 14px; height: 10px; }
+
+  /* ---- playback ---- */
+  .transport { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; flex-wrap: wrap; }
+  input[type=range] { accent-color: var(--series-1); }
+  #stepSlider { width: 220px; }
+  .stepread { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .stepread b { color: var(--text-primary); }
+
+  /* ---- detail ---- */
+  #detail { margin-top: 18px; }
+  .detail-body { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+  /* bars sit directly on the surface with a baseline rule; zero reads as zero */
+  .bars { display: grid; grid-template-columns: 16px 240px 56px; gap: 4px 10px; align-items: center;
+          border-left: 1px solid var(--rule); padding-left: 10px; }
+  .bars .d { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .bars .barwrap { height: 11px; }
+  .bars .fill { height: 11px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 0; }
+  .bars .v { font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .bars .d.is-sol { color: var(--good); font-weight: 700; }
+  .bars .v.zero { color: var(--muted); }
+
+  /* per-cell step x digit heatmap */
+  .hm { display: grid; gap: 1px; }
+  .hm i { display: block; width: 13px; height: 13px; border-radius: 2px; }
+  .hm .lbl { font-size: 10px; color: var(--muted); text-align: right; padding-right: 4px;
+             font-variant-numeric: tabular-nums; line-height: 13px; }
+  .hm .colhdr { font-size: 9px; color: var(--muted); text-align: center; line-height: 11px; }
+  .hm .now { outline: 1.5px solid var(--text-primary); outline-offset: 0; }
+
+  table { border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 3px 7px; text-align: right; border-bottom: 1px solid var(--grid-line); }
+  th { color: var(--muted); font-weight: 500; }
+  th:first-child, td:first-child { text-align: left; }
+  td.hi { color: var(--series-1); font-weight: 600; }
+  td.sol { color: var(--good); font-weight: 600; }
+  .tablewrap { max-height: 280px; overflow: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+
+  .stats { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--text-secondary); }
+  .stats b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .tag.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+  .tag.no { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
+  .msg { padding: 20px; color: var(--text-secondary); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<h1>MDM Sudoku decoding paths</h1>
+<div class="sub" id="meta">Loading…</div>
+
+<div class="filters">
+  <div class="field">
+    <label for="splitSel">Eval split</label>
+    <select id="splitSel"></select>
+  </div>
+  <div class="field">
+    <label for="resultSel">Path result</label>
+    <select id="resultSel">
+      <option value="all">All</option>
+      <option value="correct">Correct only</option>
+      <option value="wrong">Incorrect only</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="sampleSel">Sample</label>
+    <select id="sampleSel"></select>
+  </div>
+  <div class="field">
+    <label>&nbsp;</label>
+    <div style="display:flex;gap:6px">
+      <button id="prevBtn" title="Previous sample">Prev</button>
+      <button id="nextBtn" title="Next sample">Next</button>
+    </div>
+  </div>
+  <div class="field">
+    <label for="modeSel">Cell display</label>
+    <select id="modeSel">
+      <option value="probs">9-digit probabilities</option>
+      <option value="digit">Current digit + confidence</option>
+    </select>
+  </div>
+</div>
+
+<div id="loading" class="msg">Loading split data…</div>
+
+<main id="main" class="hidden">
+  <section class="panel">
+    <h2>Puzzle &amp; ground-truth solution</h2>
+    <div id="boardLeft" class="board"></div>
+    <div class="legend">
+      <span class="item"><span class="swatch" style="background:var(--text-primary)"></span>Given clue (in the prompt)</span>
+      <span class="item"><span class="swatch" style="background:var(--series-1)"></span>Cell the model must fill</span>
+    </div>
+    <div class="stats" id="leftStats"></div>
+  </section>
+
+  <section class="panel" style="flex:1 1 620px">
+    <div class="panel-head">
+      <h2>Decoding path</h2>
+      <span id="resultTag"></span>
+    </div>
+
+    <div class="transport">
+      <button id="playBtn" class="primary">Play</button>
+      <input type="range" id="stepSlider" min="0" max="19" value="0" aria-label="denoising step">
+      <span class="stepread" id="stepRead"></span>
+      <label style="font-size:11px;color:var(--muted)">speed
+        <input type="range" id="speedSlider" min="1" max="10" value="4" style="width:80px;vertical-align:middle">
+      </label>
+    </div>
+
+    <div id="boardRight" class="board"></div>
+
+    <div class="legend">
+      <span class="item"><span class="swatch ring-c"></span>Unmasked at this step</span>
+      <span class="item"><span class="swatch ring-r"></span>Re-masked at this step</span>
+      <span class="item"><span class="swatch ring-g"></span>Ground-truth digit</span>
+      <span class="item"><span class="swatch" style="background:var(--critical)"></span>Committed digit &ne; solution</span>
+      <span class="item">Faded cell = currently committed</span>
+      <span class="item"><span class="swatch" style="background:var(--series-1);height:3px;border-radius:2px"></span>p(argmax) bar, digit view only</span>
+    </div>
+    <div class="scale">
+      <span>p(digit) 0</span><span class="ramp" id="ramp"></span><span>1</span>
+    </div>
+    <div class="stats" id="rightStats"></div>
+  </section>
+</main>
+
+<section class="panel" id="detail">
+  <div class="panel-head">
+    <h2 id="detailTitle">Cell probabilities</h2>
+    <button id="tableBtn">Show table view</button>
+  </div>
+  <div class="detail-body">
+    <div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px" id="barsCap"></div>
+      <div id="bars" class="bars"></div>
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">p(digit) across every denoising step — rows are digits 1–9, columns are steps</div>
+      <div id="hm" class="hm"></div>
+    </div>
+  </div>
+  <div id="tableWrap" class="tablewrap hidden"></div>
+</section>
+
+<script>
+"use strict";
+
+const RAMP_STEPS = 13, N = 81, SIDE = 9, INK_FLIP = 7;
+
+const state = {
+  index: null, data: null, list: [], sample: null,
+  step: 0, playing: false, timer: null, mode: "probs",
+  sel: 40, probs: null, conf: null, T: 20,
+};
+
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function b64ToU8(s) {
+  const bin = atob(s), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function rampIndex(p) {
+  if (p <= 0.004) return 0;
+  return clamp(1 + Math.round(p * (RAMP_STEPS - 2)), 1, RAMP_STEPS - 1);
+}
+const rampVar = (i) => `var(--seq-${i})`;
+const inkFor = (i) => (i >= INK_FLIP ? "#fff" : "var(--text-secondary)");
+
+function buildBoard(el) {
+  el.textContent = "";
+  for (let i = 0; i < N; i++) {
+    const c = document.createElement("div");
+    c.className = "cell";
+    const r = (i / SIDE) | 0, q = i % SIDE;
+    if (q === 2 || q === 5) c.classList.add("bx-r");
+    if (r === 2 || r === 5) c.classList.add("bx-b");
+    el.appendChild(c);
+  }
+  return [...el.children];
+}
+let leftCells = [], rightCells = [];
+
+function renderLeft(s) {
+  for (let i = 0; i < N; i++) {
+    const r = (i / SIDE) | 0, q = i % SIDE, c = leftCells[i];
+    c.textContent = s.solution[i];
+    c.className = "cell" + (q === 2 || q === 5 ? " bx-r" : "") + (r === 2 || r === 5 ? " bx-b" : "") +
+                  (s.puzzle[i] !== "0" ? " given" : " derived");
+  }
+  $("leftStats").textContent =
+    `Given clues ${s.n_given} · cells to fill ${N - s.n_given} · sample index ${s.idx}`;
+}
+
+function buildRightCellContents() {
+  for (let i = 0; i < N; i++) {
+    const c = rightCells[i];
+    c.textContent = "";
+    c.tabIndex = 0;
+    const pm = document.createElement("div");
+    pm.className = "pm";
+    for (let d = 0; d < 9; d++) {
+      const sp = document.createElement("span");
+      sp.textContent = String(d + 1);
+      pm.appendChild(sp);
+    }
+    const pin = document.createElement("div"); pin.className = "pin";
+    const dg = document.createElement("div"); dg.className = "digit";
+    const cb = document.createElement("div"); cb.className = "confbar";
+    cb.appendChild(document.createElement("i"));
+    c.append(pm, pin, dg, cb);
+  }
+}
+
+const boardAfter = (s, k) => (k + 1 < s.steps.length ? s.steps[k + 1].xt : s.pred);
+
+function renderRight() {
+  const s = state.sample, k = state.step, st = s.steps[k], nxt = boardAfter(s, k);
+  const base = k * N * 9;
+
+  for (let i = 0; i < N; i++) {
+    const c = rightCells[i];
+    const wasMasked = st.xt[i] === ".", nowMasked = nxt[i] === ".";
+    const fresh = wasMasked && !nowMasked;         // committed at this step
+    const remasked = !wasMasked && nowMasked;      // thrown back to [MASK]
+    const committed = !wasMasked;
+    const solDigit = s.solution[i];
+
+    c.classList.toggle("fresh", fresh);
+    c.classList.toggle("remasked", remasked);
+    c.classList.toggle("committed", committed);
+    c.classList.toggle("sel", i === state.sel);
+
+    const pm = c.children[0], pin = c.children[1], dg = c.children[2], cb = c.children[3];
+
+    if (state.mode === "probs") {
+      pm.classList.remove("hidden"); dg.classList.add("hidden"); cb.classList.add("hidden");
+      for (let d = 0; d < 9; d++) {
+        const ri = rampIndex(state.probs[base + i * 9 + d] / 255), sp = pm.children[d];
+        sp.style.background = rampVar(ri);
+        sp.style.color = inkFor(ri);
+        sp.classList.toggle("sol", String(d + 1) === solDigit);
+      }
+      if (committed) {
+        pin.textContent = st.xt[i];
+        pin.style.color = st.xt[i] === solDigit ? "var(--text-primary)" : "var(--critical)";
+      } else pin.textContent = "";
+    } else {
+      pm.classList.add("hidden"); dg.classList.remove("hidden"); cb.classList.remove("hidden");
+      pin.textContent = "";
+      const shown = nowMasked ? st.x0[i] : nxt[i];
+      if (wasMasked && !fresh) {
+        dg.textContent = "·"; dg.className = "digit mask";
+      } else {
+        dg.textContent = shown;
+        dg.className = "digit" + (shown === solDigit ? "" : " wrong");
+      }
+      cb.children[0].style.width = ((state.conf[k * N + i] / 255) * 100).toFixed(1) + "%";
+    }
+  }
+
+  const masked = [...st.xt].filter((ch) => ch === ".").length;
+  let rev = 0, rem = 0, wrongNow = 0;
+  for (let i = 0; i < N; i++) {
+    const a = st.xt[i] === ".", b = nxt[i] === ".";
+    if (a && !b) rev++;
+    if (!a && b) rem++;
+    if (!b && nxt[i] !== s.solution[i]) wrongNow++;
+  }
+
+  $("stepRead").innerHTML =
+    `step <b>${k + 1}/${s.steps.length}</b> &nbsp; t=<b>${st.t}</b> &nbsp; masked <b>${masked}</b>`;
+  $("rightStats").innerHTML =
+    `<span>Unmasked this step <b>${rev}</b></span>` +
+    `<span>Re-masked this step <b>${rem}</b></span>` +
+    `<span>Committed cells wrong <b>${wrongNow}</b></span>` +
+    `<span>Final board <b>${s.correct ? "solved" : "wrong"}</b></span>`;
+  $("stepSlider").value = k;
+
+  renderDetail();
+}
+
+function renderDetail() {
+  const s = state.sample, k = state.step, i = state.sel;
+  const r = (i / SIDE) | 0, q = i % SIDE, st = s.steps[k], sol = s.solution[i];
+  const base = k * N * 9 + i * 9;
+
+  let argd = 0, argp = -1;
+  for (let d = 0; d < 9; d++) { const p = state.probs[base + d]; if (p > argp) { argp = p; argd = d; } }
+
+  $("detailTitle").textContent = `Cell r${r + 1}c${q + 1}`;
+  $("barsCap").textContent =
+    `p(digit) at step ${k + 1} of ${s.steps.length} (t=${st.t}) · ` +
+    `${st.xt[i] === "." ? "masked" : "committed " + st.xt[i]} · ground truth ${sol}` +
+    (s.puzzle[i] !== "0" ? " · given clue" : "") + ` · argmax ${argd + 1}`;
+
+  const bars = $("bars");
+  bars.textContent = "";
+  for (let d = 0; d < 9; d++) {
+    const p = state.probs[base + d] / 255, isSol = String(d + 1) === sol;
+    const lab = document.createElement("div");
+    lab.className = "d" + (isSol ? " is-sol" : "");
+    lab.textContent = String(d + 1);
+    const wrap = document.createElement("div"); wrap.className = "barwrap";
+    const fill = document.createElement("div"); fill.className = "fill";
+    fill.style.width = (p * 100).toFixed(2) + "%";
+    if (isSol) fill.style.background = "var(--good)";
+    wrap.appendChild(fill);
+    const val = document.createElement("div");
+    val.className = "v" + (p < 0.001 ? " zero" : "");
+    val.textContent = (p * 100).toFixed(1) + "%";
+    bars.append(lab, wrap, val);
+  }
+
+  // step x digit heatmap for this cell
+  const hm = $("hm");
+  hm.textContent = "";
+  hm.style.gridTemplateColumns = `18px repeat(${s.steps.length}, 13px)`;
+  const corner = document.createElement("div");
+  hm.appendChild(corner);
+  for (let t = 0; t < s.steps.length; t++) {
+    const h = document.createElement("div");
+    h.className = "colhdr";
+    h.textContent = (t + 1) % 5 === 0 ? String(t + 1) : "";
+    hm.appendChild(h);
+  }
+  for (let d = 0; d < 9; d++) {
+    const lb = document.createElement("div");
+    lb.className = "lbl"; lb.textContent = String(d + 1);
+    if (String(d + 1) === sol) lb.style.color = "var(--good)";
+    hm.appendChild(lb);
+    for (let t = 0; t < s.steps.length; t++) {
+      const p = state.probs[t * N * 9 + i * 9 + d] / 255;
+      const cell = document.createElement("i");
+      cell.style.background = rampVar(rampIndex(p));
+      if (t === k) cell.classList.add("now");
+      cell.title = `step ${t + 1} · digit ${d + 1} · ${(p * 100).toFixed(1)}%`;
+      hm.appendChild(cell);
+    }
+  }
+
+  if (!$("tableWrap").classList.contains("hidden")) renderTable();
+}
+
+function renderTable() {
+  const s = state.sample, i = state.sel, sol = s.solution[i];
+  const rows = ["<tr><th>step</th><th>t</th><th>state</th>" +
+    [1,2,3,4,5,6,7,8,9].map((d) => `<th>${d}</th>`).join("") + "</tr>"];
+  for (let k = 0; k < s.steps.length; k++) {
+    const base = k * N * 9 + i * 9;
+    let argd = 0, argp = -1;
+    for (let d = 0; d < 9; d++) { const p = state.probs[base + d]; if (p > argp) { argp = p; argd = d; } }
+    const cells = [];
+    for (let d = 0; d < 9; d++) {
+      const p = (state.probs[base + d] / 255 * 100).toFixed(1);
+      cells.push(`<td class="${String(d + 1) === sol ? "sol" : (d === argd ? "hi" : "")}">${p}</td>`);
+    }
+    const stt = s.steps[k].xt[i] === "." ? "masked" : s.steps[k].xt[i];
+    rows.push(`<tr${k === state.step ? ' style="background:var(--grid-line)"' : ""}>` +
+      `<td>${k + 1}</td><td>${s.steps[k].t}</td><td>${stt}</td>${cells.join("")}</tr>`);
+  }
+  $("tableWrap").innerHTML = `<table>${rows.join("")}</table>`;
+}
+
+function loadSample(s) {
+  state.sample = s;
+  state.probs = b64ToU8(s.probs_b64);
+  state.conf = b64ToU8(s.conf_b64);
+  state.T = s.steps.length;
+  state.step = 0;
+  $("stepSlider").max = state.T - 1;
+  $("resultTag").innerHTML = s.correct
+    ? '<span class="tag ok">solved</span>' : '<span class="tag no">not solved</span>';
+  renderLeft(s);
+  buildRightCellContents();
+  renderRight();
+}
+
+function applyFilter() {
+  const f = $("resultSel").value;
+  state.list = state.data.samples.filter((s) =>
+    f === "all" ? true : f === "correct" ? s.correct : !s.correct);
+  const sel = $("sampleSel");
+  sel.textContent = "";
+  state.list.forEach((s, n) => {
+    const o = document.createElement("option");
+    o.value = String(n);
+    o.textContent = `#${s.idx} — ${s.correct ? "solved" : "wrong"} — ${s.n_given} clues`;
+    sel.appendChild(o);
+  });
+  if (!state.list.length) {
+    $("main").classList.add("hidden");
+    $("loading").textContent = "No samples match this filter in this split.";
+    $("loading").classList.remove("hidden");
+    return;
+  }
+  $("loading").classList.add("hidden");
+  $("main").classList.remove("hidden");
+  sel.value = "0";
+  loadSample(state.list[0]);
+}
+
+async function loadSplit(name) {
+  stop();
+  $("loading").textContent = "Loading split data…";
+  $("loading").classList.remove("hidden");
+  $("main").classList.add("hidden");
+  const entry = state.index.splits.find((s) => s.split === name);
+  const res = await fetch(entry.file);
+  if (!res.ok) throw new Error(`${entry.file}: ${res.status}`);
+  state.data = await res.json();
+
+  const meta = $("meta");
+  meta.textContent = "";
+  const code = document.createElement("code");
+  code.textContent = state.index.checkpoint;
+  const line = document.createElement("div");
+  line.textContent =
+    `${state.data.dataset} · ${state.data.num_samples} samples · whole-board accuracy ` +
+    `${(state.data.accuracy * 100).toFixed(1)}% (${entry.n_correct}/${entry.num_samples}) · ` +
+    `${state.data.diffusion_steps} denoising steps · ${state.index.decoding_strategy}`;
+  meta.append(code, line);
+
+  applyFilter();
+}
+
+function stop() {
+  state.playing = false;
+  if (state.timer) { clearInterval(state.timer); state.timer = null; }
+  $("playBtn").textContent = "Play";
+}
+function play() {
+  if (state.step >= state.T - 1) state.step = 0;
+  state.playing = true;
+  $("playBtn").textContent = "Pause";
+  state.timer = setInterval(() => {
+    if (state.step >= state.T - 1) { stop(); return; }
+    state.step++; renderRight();
+  }, 1100 / Number($("speedSlider").value));
+}
+
+function stepSample(delta) {
+  stop();
+  const sel = $("sampleSel");
+  const n = clamp(+sel.value + delta, 0, state.list.length - 1);
+  sel.value = String(n);
+  loadSample(state.list[n]);
+}
+
+function wire() {
+  leftCells = buildBoard($("boardLeft"));
+  rightCells = buildBoard($("boardRight"));
+
+  const pick = (e) => {
+    const c = e.target.closest(".cell");
+    if (!c) return;
+    state.sel = rightCells.indexOf(c);
+    renderRight();
+  };
+  $("boardRight").addEventListener("click", pick);
+  $("boardRight").addEventListener("focusin", pick);
+
+  $("splitSel").addEventListener("change", (e) => loadSplit(e.target.value));
+  $("resultSel").addEventListener("change", applyFilter);
+  $("sampleSel").addEventListener("change", (e) => { stop(); loadSample(state.list[+e.target.value]); });
+  $("modeSel").addEventListener("change", (e) => { state.mode = e.target.value; renderRight(); });
+  $("prevBtn").addEventListener("click", () => stepSample(-1));
+  $("nextBtn").addEventListener("click", () => stepSample(1));
+  $("playBtn").addEventListener("click", () => (state.playing ? stop() : play()));
+  $("stepSlider").addEventListener("input", (e) => { stop(); state.step = +e.target.value; renderRight(); });
+  $("speedSlider").addEventListener("input", () => { if (state.playing) { stop(); play(); } });
+  $("tableBtn").addEventListener("click", () => {
+    const w = $("tableWrap");
+    w.classList.toggle("hidden");
+    $("tableBtn").textContent = w.classList.contains("hidden") ? "Show table view" : "Hide table view";
+    if (!w.classList.contains("hidden")) renderTable();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
+    if (e.key === " ") { e.preventDefault(); state.playing ? stop() : play(); }
+    else if (e.key === "ArrowRight") { stop(); state.step = clamp(state.step + 1, 0, state.T - 1); renderRight(); }
+    else if (e.key === "ArrowLeft") { stop(); state.step = clamp(state.step - 1, 0, state.T - 1); renderRight(); }
+  });
+
+  const ramp = $("ramp");
+  for (let i = 0; i < RAMP_STEPS; i++) {
+    const b = document.createElement("i");
+    b.style.background = rampVar(i);
+    ramp.appendChild(b);
+  }
+}
+
+(async function main() {
+  wire();
+  try {
+    const res = await fetch("index.json");
+    if (!res.ok) throw new Error(`index.json: ${res.status}`);
+    state.index = await res.json();
+    const sel = $("splitSel");
+    state.index.splits.forEach((s) => {
+      const o = document.createElement("option");
+      o.value = s.split;
+      o.textContent = `${s.split} (${(s.accuracy * 100).toFixed(1)}% solved)`;
+      sel.appendChild(o);
+    });
+    await loadSplit(state.index.splits[0].split);
+  } catch (err) {
+    $("loading").textContent =
+      "Could not load data: " + err.message +
+      " — serve this directory over HTTP (python3 -m http.server); fetch() does not work on file:// URLs.";
+  }
+})();
+</script>
+</body>
+</html>
